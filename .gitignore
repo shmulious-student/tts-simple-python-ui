@@ -42,3 +42,6 @@ yarn-error.log*
 # Ignore frontend build in backend static mount
 /backend/static/
 
+# Hugging Face cache
+.cache/
+huggingface/

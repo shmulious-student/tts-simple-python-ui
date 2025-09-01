@@ -2,3 +2,11 @@ edge-tts
 fastapi
 uvicorn[standard]
 aiofiles
+requests
+beautifulsoup4
+transformers
+torch
+sentencepiece
+sacremoses
+langdetect
+protobuf

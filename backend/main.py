@@ -1,12 +1,23 @@
 import os
-from fastapi import FastAPI, HTTPException
+import logging
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from typing import Literal
 import tempfile
 
 from model import EdgeTtsModel
+from ai_processing.orchestrator import AiProcessor
+
+# --- Logging Configuration ---
+# This sets up a basic configuration for logging throughout the application.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - [%(name)s] - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 # --- FastAPI App Initialization ---
 
@@ -29,12 +40,21 @@ app.add_middleware(
 )
 
 tts_model = EdgeTtsModel()
+logging.info("Initializing AI Processor... (This may take a moment)")
+ai_processor = AiProcessor()
+logging.info("Initialization complete.")
 
 # --- Pydantic Models for API ---
 
 class SynthesizeRequest(BaseModel):
     text: str
     voice: str
+
+class ProcessUrlRequest(BaseModel):
+    url: str
+    target_lang: Literal['en', 'he']
+    summary_level: Literal['short', 'medium', 'long'] = 'medium'
+
 
 # --- API Endpoints ---
 
@@ -81,6 +101,27 @@ async def get_voices():
             formatted_voices["English"][short_name] = f"{gender} ({name})"
 
     return formatted_voices
+
+@app.post("/api/process-url")
+async def process_url_endpoint(request: ProcessUrlRequest):
+    """
+    Fetches an article, summarizes it to a specified level, translates it
+    to the target language, and returns the resulting text.
+    """
+    try:
+        processed_data = ai_processor.process_url(
+            url=request.url,
+            target_lang=request.target_lang,
+            summary_level=request.summary_level
+        )
+        return processed_data
+    except ValueError as e: # For bad user input like unsupported lang or no text found
+        raise HTTPException(status_code=422, detail=str(e))
+    except RuntimeError as e: # For model/network errors
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        # Catch-all for any other unexpected errors
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
 @app.post("/api/synthesize")
 async def synthesize_speech(request: SynthesizeRequest):
